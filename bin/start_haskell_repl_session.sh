@@ -1,54 +1,49 @@
 #!/bin/bash
 
-# --- 設定 ---
-# REPLを起動するコマンド
-REPL_COMMAND="cabal repl"
-# jqを使ってJSONから値を読み込む
-# REPLに使用するtmuxセッション名
-CONFIG_FILE="$(dirname "$0")/../config.json"
-TMUX_SESSION_NAME=$(jq -r '.tmux_session_name' "$CONFIG_FILE")
-#TMUX_TARGET=$(jq -r '.tmux_target_pane' "$CONFIG_FILE")
-# プロジェクトルートのパスを引数として受け取る
-# -----------------
+# --- 環境設定のロードとチェック ---
+LOAD_ENV_SCRIPT="$(dirname "$0")/load_environment.sh"
+GET_CONFIG_SCRIPT="$(dirname "$0")/get_config_value.sh"
 
-PROJECT_DIR="$1"
+# 1. スクリプト存在チェック
+if [ ! -f "$LOAD_ENV_SCRIPT" ]; then echo "致命的なエラー: $LOAD_ENV_SCRIPT が見つかりません。" >&2; exit 1; fi
+if [ ! -f "$GET_CONFIG_SCRIPT" ]; then echo "致命的なエラー: $GET_CONFIG_SCRIPT が見つかりません。" >&2; exit 1; fi
 
-# 1. 引数の検証
-if [ -z "$PROJECT_DIR" ]; then
-    echo "エラー: プロジェクトルートのパスを指定してください。" >&2
-    echo "使用法: $0 /path/to/your/haskell/project" >&2
-    exit 1
-fi
+# 2. GHCI_CONNECTOR_ROOTの環境チェック（config.jsonのパス解決のため）
+# load_environment.shが成功すれば $GHCI_CONNECTOR_ROOT の値が返るが、ここでは使わない
+CONNECTOR_ROOT=$("$LOAD_ENV_SCRIPT" "$0")
+if [ $? -ne 0 ]; then exit 1; fi
 
-# パスが存在し、ディレクトリであることを確認
+# 3. 設定値の取得を集中化
+TMUX_SESSION_NAME=$("$GET_CONFIG_SCRIPT" "tmux_session_name")
+REPL_COMMAND=$("$GET_CONFIG_SCRIPT" "repl_command")
+# ⭐ 修正: config.jsonからHaskellプロジェクトルートを取得
+HASKELL_PROJECT_DIR=$("$GET_CONFIG_SCRIPT" "haskell_project_root")
+
+if [ $? -ne 0 ]; then exit 1; fi # エラーチェック
+
+# ⭐ 修正: 作業ディレクトリとしてHaskellプロジェクトルートを使用
+PROJECT_DIR="$HASKELL_PROJECT_DIR"
+
+# ------------------------------
+
+# 1. パス検証:
 if [ ! -d "$PROJECT_DIR" ]; then
-    echo "エラー: 指定されたパス '$PROJECT_DIR' は存在しないか、ディレクトリではありません。" >&2
+    echo "【$0 実行中断】エラー: プロジェクトルート '$PROJECT_DIR' は存在しないか、ディレクトリではありません。" >&2
     exit 1
 fi
-
-# 絶対パスに変換 (任意だが推奨)
-PROJECT_DIR=$(realpath "$PROJECT_DIR")
 
 # 2. tmuxセッションの存在確認と起動
-# 指定されたセッション名を持つセッションが既に存在するかチェック
 tmux has-session -t "$TMUX_SESSION_NAME" 2>/dev/null
 
 if [ $? != 0 ]; then
     # セッションが存在しない場合: 新規セッションを作成し、REPLを起動
-
     echo "INFO: 新しいtmuxセッション '$TMUX_SESSION_NAME' を作成します。"
     
-    # -d: セッションをデタッチモードで作成（すぐにターミナルにアタッチしない）
-    # -c: 作業ディレクトリを指定
-    # run-shell: ペインで実行する初期コマンドを指定
     tmux new-session -d -s "$TMUX_SESSION_NAME" -c "$PROJECT_DIR" "$REPL_COMMAND"
 
     echo "INFO: セッション '$TMUX_SESSION_NAME' がプロジェクト '$PROJECT_DIR' で起動しました。"
 else
     # セッションが既に存在する場合: 
-    # 既存のセッションの作業ディレクトリを変更し、新しいウィンドウでREPLを起動するなどの拡張も考えられますが、
-    # シンプルに既存セッションにアタッチするよう促します。
-    
     echo "WARNING: tmuxセッション '$TMUX_SESSION_NAME' は既に存在します。"
     echo "         プロジェクトディレクトリが異なる場合は、既存のセッションを終了してください。"
 fi
@@ -58,5 +53,4 @@ echo ""
 echo "セッションにアタッチするには、次のコマンドを使用してください:"
 echo "tmux attach -t $TMUX_SESSION_NAME"
 
-# 4. (任意) 続けてセッションにアタッチ
-# tmux attach -t "$TMUX_SESSION_NAME"
+exit 0

@@ -49,7 +49,7 @@ M.send_text_to_repl = function(text)
         text = ":{\n" .. text .. "\n:}"
         vim.notify('INFO: 複数行のため :{ :} で囲んで送信します', vim.log.levels.INFO, { title = "Haskell REPL" })
     end
-    
+
     -- 送信テキストをシェル用にエスケープ
     local escaped_text = vim.fn.shellescape(text)
 
