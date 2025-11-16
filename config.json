@@ -1,0 +1,5 @@
+{
+  "tmux_session_name": "haskell_repl",
+  "repl_command": "cabal repl",
+  "tmux_target_pane": "haskell_repl"
+}
