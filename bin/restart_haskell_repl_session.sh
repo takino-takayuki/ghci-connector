@@ -1,35 +1,54 @@
 #!/bin/bash
 
-# --- 設定 ---
-CONFIG_FILE="$(dirname "$0")/../config.json"
-TMUX_TARGET_PANE=$(jq -r '.tmux_target_pane' "$CONFIG_FILE")
-REPL_COMMAND=$(jq -r '.repl_command' "$CONFIG_FILE")
-# -----------------
+# --- 依存スクリプトのパス定義 ---
+# 🌟 修正: 共通ロジックスクリプトのパスを追加
+GET_TARGET_SCRIPT="$(dirname "$0")/get_project_and_target.sh"
+# TMUX_SESSION_NAME="haskell_manager" <-- 削除
 
-PROJECT_DIR="$1"
-if [ -z "$PROJECT_DIR" ]; then
-    echo "エラー: プロジェクトルートのパスが指定されていません。" >&2
+# スクリプトの存在チェック
+if [ ! -f "$GET_TARGET_SCRIPT" ]; then
+    echo "致命的なエラー: 依存スクリプト '$GET_TARGET_SCRIPT' が見つかりません。" >&2
+    exit 1
+fi
+if ! command -v tmux &> /dev/null; then
+    echo "致命的なエラー: tmux がインストールされていません。" >&2
     exit 1
 fi
 
-# 2. ペイン内部でREPLコマンドを再実行（ソフトリスタート）
-echo "INFO: ペイン内部でREPLコマンドを再実行（ソフトリスタート）します。"
 
-# ⭐ 修正箇所: 既存のプロセスを中断せず、GHCi終了コマンド ':quit' を送信
-tmux send-keys -t "$TMUX_TARGET_PANE" ':quit' Enter
+# 1. 🌟 修正: 共通スクリプトからプロジェクト名とターゲットを取得
+TARGET_INFO=$("$GET_TARGET_SCRIPT")
+if [ $? -ne 0 ]; then
+    # get_project_and_target.sh のエラーメッセージをそのまま出力させる
+    echo "$TARGET_INFO" >&2
+    exit 1
+fi
 
-# GHCiが終了し、シェルが応答するまで待機 (GHCiは比較的速く終了するため、1.0秒で十分なはずです)
-sleep 1.0 
+PROJECT_NAME=$(echo "$TARGET_INFO" | head -n 1)
+TMUX_TARGET=$(echo "$TARGET_INFO" | tail -n 1)
 
-# ペインをクリア (不要な出力を消す)
-tmux send-keys -t "$TMUX_TARGET_PANE" 'clear' Enter
 
-# 画面リセットまで待機
-sleep 0.5 
+# 2. ソフトリスタートコマンドを送信
+# cabal repl に :quit を送信して終了させます。
+echo "INFO: REPLセッション '$TMUX_TARGET' に ':quit' コマンドを送信します。" >&2
+tmux send-keys -t "$TMUX_TARGET" ":quit" C-m
 
-# REPLコマンドを再送信
-tmux send-keys -t "$TMUX_TARGET_PANE" "$REPL_COMMAND" Enter
+if [ $? -ne 0 ]; then
+    # REPLウィンドウが存在しない可能性がある場合は、リスタートを試みずに警告を出す
+    echo "警告: REPLウィンドウ '$TMUX_TARGET' が存在しないか、コマンド送信に失敗しました。" >&2
+    echo "INFO: tstart_repl_auto を実行してウィンドウを起動してください。" >&2
+    exit 1
+fi
 
-echo "INFO: REPLの再起動コマンドをペインに送信しました。"
+# 3. REPLを再実行 (cd は既に完了しているため、cabal repl のみでOK)
+echo "INFO: REPLセッション '$TMUX_TARGET' で 'cabal repl' を再実行します。" >&2
+tmux send-keys -t "$TMUX_TARGET" "cabal repl" C-m
 
-exit 0
+# 4. 結果出力
+if [ $? -eq 0 ]; then
+    echo "INFO: ソフトリスタートを完了しました。" >&2
+else
+    echo "WARNING: ソフトリスタート中にエラーが発生した可能性があります。" >&2
+fi
+
+exit $?
