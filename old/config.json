@@ -1,6 +1,0 @@
-{
-  "tmux_session_name": "haskell_repl",
-  "repl_command": "cabal repl",
-  "tmux_target_pane": "haskell_repl",
-  "haskell_project_root": "/Users/takaykitakino/work/haskell/trump2/"
-}
