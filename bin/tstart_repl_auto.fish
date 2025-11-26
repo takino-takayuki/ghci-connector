@@ -5,6 +5,12 @@
 #       プロジェクト名とターゲット決定のロジックは外部Bashスクリプトに依存する。
 # ==========================================================
 function tstart_repl_auto
+
+    # ⭐ 修正 1: 最初の引数からコンポーネントタイプを取得 (デフォルトは 'test')
+    set -l COMPONENT_TYPE "$argv[1]"
+    if test -z "$COMPONENT_TYPE"
+        set COMPONENT_TYPE "test" # デフォルトを 'test' に設定
+    end
     
     set -l TMUX_SESSION_NAME "haskell_manager"
     set -l PROJECT_ROOT "$PROJECT_ROOT"
@@ -42,7 +48,9 @@ function tstart_repl_auto
 
     set -l PROJECT_DIR (pwd)
 
-    # 2. 共通Bashスクリプトから情報を取得 [PROJECT_NAME, TMUX_TARGET]
+    # ----------------------------------------
+    # 2. プロジェクト情報とターゲットを取得
+    # ----------------------------------------
     set -l TARGET_INFO (command bash "$GET_TARGET_SCRIPT")
 
     if test $status -ne 0
@@ -51,15 +59,26 @@ function tstart_repl_auto
     end
 
     # Bashスクリプトの出力2行を取得
-    set -l PROJECT_NAME "$TARGET_INFO[1]"
-    set -l TMUX_TARGET "$TARGET_INFO[2]" # 例: haskell_manager:MyProject_Haskell_REPL
-    
-    # ⭐ 修正 1: 正規表現でCR/LFを含む全ての空白文字を確実に除去し、文字列比較の問題を回避
-    set -l PROJECT_NAME (string replace -r '[\s\r\n]+' '' "$PROJECT_NAME")
-    set -l TMUX_TARGET (string replace -r '[\s\r\n]+' '' "$TMUX_TARGET")
-
+    # set -l PROJECT_NAME "$TARGET_INFO[1]"
+    # set -l TMUX_TARGET "$TARGET_INFO[2]" # 例: haskell_manager:MyProject_Haskell_REPL
+    # set -l PROJECT_NAME (string replace -r '[\s\r\n]+' '' "$PROJECT_NAME")
+    # set -l TMUX_TARGET (string replace -r '[\s\r\n]+' '' "$TMUX_TARGET")
+    set -l PROJECT_NAME (string replace -r '[\\s\\r\\n]+' '' "$TARGET_INFO[1]")
+    set -l TMUX_TARGET (string replace -r '[\\s\\r\\n]+' '' "$TARGET_INFO[2]")
     set -l WINDOW_NAME (string split ":" "$TMUX_TARGET")[2] 
     set -l WINDOW_NAME (string replace -r '[\s\r\n]+' '' "$WINDOW_NAME")
+
+    # ⭐ 修正 2: get_cabal_target.sh のパスを定義
+    set -l GET_CABAL_TARGET_SCRIPT "$PROJECT_ROOT/bin/get_cabal_target.sh"
+    
+    # ⭐ 修正 3: 新規スクリプトを使って cabal ターゲットを取得
+    set -l CABAL_TARGET (command bash "$GET_CABAL_TARGET_SCRIPT" "$PROJECT_NAME" "$COMPONENT_TYPE")
+    
+    if test $status -ne 0
+        echo "致命的なエラー: cabalターゲットの取得に失敗しました。" >&2
+        echo "$CABAL_TARGET" >&2
+        return 1
+    end
 
     echo "INFO: プロジェクト名: $PROJECT_NAME" >&2
     echo "INFO: ターゲット: $TMUX_TARGET" >&2
@@ -95,7 +114,9 @@ function tstart_repl_auto
       sleep 0.2
       
       # ターゲットウィンドウにコマンドを送信 (cabal repl 実行)
-      tmux send-keys -t "$TMUX_TARGET" "cabal repl repl-formatter:exe:repl-formatter --ghc-options='-ghci-script=./.ghci'" \n
+      # tmux send-keys -t "$TMUX_TARGET" "cabal repl repl-formatter:exe:repl-formatter --ghc-options='-ghci-script=./.ghci'" \n
+    # ⭐ 修正 4: cabal repl コマンドのターゲットを動的に設定
+      tmux send-keys -t "$TMUX_TARGET" "cabal repl $CABAL_TARGET --ghc-options='-ghci-script=./.ghci'" \n
       
       if test $status -ne 0
           echo "致命的なエラー: 'cabal repl' の送信に失敗しました。ターゲット: $TMUX_TARGET (send-keys 終了コード: $status)" >&2
