@@ -42,8 +42,8 @@ fi
 
 # 3. REPLを再実行 (cd は既に完了しているため、cabal repl のみでOK)
 echo "INFO: REPLセッション '$TMUX_TARGET' で 'cabal repl' を再実行します。" >&2
-tmux send-keys -t "$TMUX_TARGET" "cabal repl" C-m
-
+#tmux send-keys -t "$TMUX_TARGET" "cabal repl" C-m
+tmux send-keys -t "$TMUX_TARGET" "cabal repl repl-formatter:exe:repl-formatter --ghc-options='-ghci-script=./.ghci'" C-m
 # 4. 結果出力
 if [ $? -eq 0 ]; then
     echo "INFO: ソフトリスタートを完了しました。" >&2

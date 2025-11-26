@@ -95,7 +95,7 @@ function tstart_repl_auto
       sleep 0.2
       
       # ターゲットウィンドウにコマンドを送信 (cabal repl 実行)
-      tmux send-keys -t "$TMUX_TARGET" "cabal repl" \n
+      tmux send-keys -t "$TMUX_TARGET" "cabal repl repl-formatter:exe:repl-formatter --ghc-options='-ghci-script=./.ghci'" \n
       
       if test $status -ne 0
           echo "致命的なエラー: 'cabal repl' の送信に失敗しました。ターゲット: $TMUX_TARGET (send-keys 終了コード: $status)" >&2
